@@ -63,12 +63,12 @@ class HasUses {
 // uses so RemoveUnused can remove unused things.  It incidentally finds uses that have
 // no definitions and issues uninitialized warnings about them.
 class FindUninitialized : public Inspector {
-    ProgramPoint    context;
+    ProgramPoint    context;    // context as of the last call or state transition
     ReferenceMap*   refMap;
     TypeMap*        typeMap;
     AllDefinitions* definitions;
     bool            lhs;  // checking the lhs of an assignment
-    ProgramPoint    currentPoint;
+    ProgramPoint    currentPoint;  // context of the current expression/statement
     // For some simple expresssions keep here the read location sets.
     // This does not include location sets read by subexpressions.
     std::map<const IR::Expression*, const LocationSet*> readLocations;
@@ -165,8 +165,16 @@ class FindUninitialized : public Inspector {
 
     bool preorder(const IR::P4Control* control) override {
         LOG3("FU Visiting control " << control->name << "[" << control->id << "]");
-        currentPoint = ProgramPoint(control);
+        BUG_CHECK(context.isBeforeStart(), "non-empty context in FindUnitialized::P4Control");
         controlLocals = &control->controlLocals;
+#if 0
+        // Analyze local virtual function implmentions
+        // FIXME -- enabling this fails with Compiler Bug: var: no definitions for any inout
+        // param of the function.  Not clear what is going wrong
+        forAllMatching<IR::Function>(controlLocals, [this](const IR::Function *func) {
+            visit(func); });
+#endif
+        currentPoint = ProgramPoint(control);
         visit(control->body);
         checkOutParameters(
             control, control->getApplyMethodType()->parameters, getCurrentDefinitions());
@@ -177,7 +185,7 @@ class FindUninitialized : public Inspector {
     bool preorder(const IR::Function* func) override {
         LOG3("FU Visiting function " << func->name << "[" << func->id << "]");
         LOG5(func);
-        currentPoint = ProgramPoint(func);
+        currentPoint = ProgramPoint(context, func);
         visit(func->body);
         bool checkReturn = !func->type->returnType->is<IR::Type_Void>();
         checkOutParameters(func, func->type->parameters, getCurrentDefinitions(), checkReturn);
@@ -239,7 +247,7 @@ class FindUninitialized : public Inspector {
     bool preorder(const IR::SwitchStatement* statement) override {
         LOG3("FU Visiting " << statement);
         visit(statement->expression);
-        currentPoint = ProgramPoint(statement->expression);
+        currentPoint = ProgramPoint(context, statement->expression);  // CTD -- added context
         auto saveCurrent = currentPoint;
         for (auto c : statement->cases) {
             if (c->statement != nullptr) {
@@ -392,6 +400,7 @@ class FindUninitialized : public Inspector {
                 auto table = am->object->to<IR::P4Table>();
                 callee.push_back(table);
             }
+            // skip control apply calls...
         } else if (auto em = mi->to<ExternMethod>()) {
             LOG4("##call to extern " << expression);
             callee = em->mayCall(); }

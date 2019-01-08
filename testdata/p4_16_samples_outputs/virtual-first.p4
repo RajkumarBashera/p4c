@@ -1,12 +1,16 @@
 extern Virtual {
     Virtual();
     abstract bit<16> f(in bit<16> ix);
+    abstract void g(inout bit<16> ix);
 }
 
 control c(inout bit<16> p) {
     Virtual() cntr = {
         bit<16> f(in bit<16> ix) {
             return ix + 16w1;
+        }
+        void g(inout bit<16> ix) {
+            ix = ix + 16w1;
         }
     };
     apply {

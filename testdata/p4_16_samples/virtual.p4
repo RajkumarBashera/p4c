@@ -20,6 +20,7 @@ extern Virtual {
     // abstract methods must be implemented
     // by the users
     abstract bit<16> f(in bit<16> ix);
+    abstract void g(inout bit<16> ix);
 }
 
 // User code
@@ -27,6 +28,9 @@ control c(inout bit<16> p) {
     Virtual() cntr = {  // implementation
         bit<16> f(in bit<16> ix) {  // abstract method implementation
             return (ix + 1);
+        }
+        void g(inout bit<16> ix) {
+            ix = ix + 1;
         }
     };
 
